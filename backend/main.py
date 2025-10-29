@@ -5,10 +5,15 @@ from pydantic import BaseModel
 from typing import List
 import json
 import asyncio
-from math_solver import MathSolver
+from agent.routing import route_question
 
-app = FastAPI(title="Math Routing Agent API", description="AI-powered mathematics assistant backend", version="1.0.0")
+app = FastAPI(
+    title="Math Routing Agent API",
+    description="AI-powered mathematics assistant backend",
+    version="1.0.0"
+)
 
+# ✅ CORS setup
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -23,12 +28,12 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-solver = MathSolver()
-
+# ✅ Request model
 class MathRequest(BaseModel):
     question: str
     stream: bool = False
 
+# ✅ Response model
 class MathResponse(BaseModel):
     question: str
     answer: str
@@ -47,7 +52,7 @@ async def health_check():
 @app.post("/solve", response_model=MathResponse)
 async def solve_math(request: MathRequest):
     try:
-        result = solver.solve(request.question)
+        result = route_question(request.question)
         return MathResponse(
             question=request.question,
             answer=result["answer"],
@@ -62,7 +67,7 @@ async def solve_math(request: MathRequest):
 async def solve_math_stream(request: MathRequest):
     async def generate():
         try:
-            result = solver.solve(request.question)
+            result = route_question(request.question)
             chunks = [
                 json.dumps({"type": "question", "data": request.question}) + "\n",
                 json.dumps({"type": "status", "data": "Solving..."}) + "\n"
