@@ -1,18 +1,44 @@
+import os
 from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
+from qdrant_client.models import Filter, PointStruct, SearchParams
+from qdrant_client.http.models import SearchRequest, VectorParams
+import requests
+from dotenv import load_dotenv
 
-client = QdrantClient("http://localhost:6333")
-model = SentenceTransformer("all-MiniLM-L6-v2")
+load_dotenv()
 
-def search_knowledge_base(question: str, threshold: float = 0.78) -> dict | None:
-    embedding = model.encode(question).tolist()
-    hits = client.search(collection_name="math_kb", query_vector=embedding, limit=1)
-    if hits and hits[0].score >= threshold:
-        payload = hits[0].payload
+# Initialize Qdrant client
+client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+
+def generate_embedding(text: str) -> list:
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/embeddings",
+            json={"model": "gemma:2b", "prompt": text},
+            timeout=30
+        )
+        result = response.json()
+        return result.get("embedding", [])
+    except Exception as e:
+        raise RuntimeError(f"Embedding generation failed: {str(e)}")
+
+def search_knowledge_base(question: str) -> dict:
+    embedding = generate_embedding(question)
+    try:
+        hits = client.search(
+            collection_name="math_kb",
+            query_vector=embedding,
+            limit=1,
+            search_params=SearchParams(hnsw_ef=128)
+        )
+        if not hits:
+            return None
+        top_hit = hits[0]
         return {
-            "answer": payload["short_answer"],
-            "steps": payload["canonical_solution_steps"],
-            "solution": "\n".join(payload["canonical_solution_steps"]),
-            "confidence": hits[0].score
+            "answer": top_hit.payload.get("answer", ""),
+            "steps": top_hit.payload.get("steps", "").split("\n"),
+            "solution": top_hit.payload.get("solution", ""),
+            "confidence": top_hit.score
         }
-    return None
+    except Exception as e:
+        raise RuntimeError(f"Qdrant search failed: {str(e)}")

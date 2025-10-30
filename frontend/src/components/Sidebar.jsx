@@ -14,7 +14,7 @@ const Sidebar = ({ chatHistory, onNewChat }) => {
         </button>
       </div>
 
-      {/* Real-Time Chat History */}
+      {/* Search History */}
       <div className="flex-1 overflow-y-auto p-4">
         <h3 className="text-gray-300 text-sm font-semibold mb-3 uppercase tracking-wide">
           Search History
@@ -29,11 +29,8 @@ const Sidebar = ({ chatHistory, onNewChat }) => {
                 className="p-2 bg-gray-800 hover:bg-gray-700 rounded cursor-pointer transition-colors"
               >
                 <p className="text-white text-xs font-medium truncate">
-                  {chat.question}
+                  {chat.question || 'Untitled'}
                 </p>
-                {chat.time && (
-                  <p className="text-gray-500 text-xs mt-1">{chat.time}</p>
-                )}
               </div>
             ))}
           </div>
@@ -42,7 +39,7 @@ const Sidebar = ({ chatHistory, onNewChat }) => {
 
       {/* Footer */}
       <div className="p-4 border-t border-gray-700">
-        <p className="text-white text-sm font-semibold">Math Routing Agent</p>
+        <p className="text-white text-sm font-semibold">Multi-Modal Agent</p>
         <p className="text-gray-400 text-xs mt-1">AI Math Assistant</p>
       </div>
     </div>

@@ -16,6 +16,7 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/typography') // ✅ Enables markdown styling
+  ],
 }
-

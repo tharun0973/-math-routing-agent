@@ -1,3 +1,4 @@
+
 def package_mcp_context(question: str, retrieved_docs: list) -> str:
     system_instructions = (
         "You are a math tutor. Produce a step-by-step solution simplified for a high-school student. "

@@ -1,3 +1,4 @@
+
 import re
 
 def validate_input(question: str) -> bool:
@@ -10,4 +11,3 @@ def validate_input(question: str) -> bool:
 def sanitize_output(answer: str) -> str:
     # Remove hallucinated phrases
     return answer.replace("I'm not sure", "").strip()
-

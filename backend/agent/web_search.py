@@ -1,7 +1,13 @@
-import subprocess
+import os
+import requests
+from dotenv import load_dotenv
 from tavily import TavilyClient
 
-client = TavilyClient(api_key="your_api_key")
+# Load environment variables
+load_dotenv()
+
+# Initialize Tavily client
+client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
 def query_ollama_mcp(question: str, context: str = "") -> dict:
     prompt = f"""
@@ -10,18 +16,23 @@ Question: {question}
 Context: {context}
 Instructions: Use clear steps, simplify for a student.
 """
-    result = subprocess.run(
-        ["ollama", "run", "gemma:2b"],
-        input=prompt.encode("utf-8"),
-        capture_output=True
-    )
-    output = result.stdout.decode("utf-8").strip()
-    return {
-        "answer": output,
-        "steps": output.split("\n"),
-        "solution": output,
-        "confidence": 0.9
-    }
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={"model": "gemma:2b", "prompt": prompt, "stream": False},
+            timeout=30
+        )
+        result = response.json()
+        answer_text = result.get("response", "").strip()
+
+        return {
+            "answer": answer_text,
+            "steps": answer_text.split("\n"),
+            "solution": answer_text,
+            "confidence": 0.9
+        }
+    except Exception as e:
+        raise RuntimeError(f"Ollama MCP failed: {str(e)}")
 
 def package_mcp_context(question: str, retrieved_docs: list) -> str:
     system_instructions = (
@@ -46,7 +57,10 @@ Retrieved Context:
     return prompt.strip()
 
 def search_web_and_generate(question: str) -> dict:
-    results = client.search(query=question, max_results=5)
-    docs = [{"source": r["url"], "text": r["content"]} for r in results]
-    prompt = package_mcp_context(question, docs)
-    return query_ollama_mcp(question, prompt)
+    try:
+        results = client.search(query=question, max_results=5)
+        docs = [{"source": r["url"], "text": r["content"]} for r in results]
+        prompt = package_mcp_context(question, docs)
+        return query_ollama_mcp(question, prompt)
+    except Exception as e:
+        return None  # Let routing fallback to MathSolver

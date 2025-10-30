@@ -6,23 +6,35 @@ function App() {
   const [chatHistory, setChatHistory] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // ✅ Load from localStorage safely
   useEffect(() => {
-    const saved = localStorage.getItem('mathChatHistory');
-    if (saved) {
-      setChatHistory(JSON.parse(saved));
+    try {
+      const saved = localStorage.getItem('mathChatHistory');
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        setChatHistory(parsed);
+      }
+    } catch (err) {
+      console.error("❌ Error parsing chatHistory:", err);
+      localStorage.removeItem('mathChatHistory');
     }
   }, []);
 
+  // ✅ Save to localStorage
   useEffect(() => {
     localStorage.setItem('mathChatHistory', JSON.stringify(chatHistory));
   }, [chatHistory]);
 
+  // ✅ Clear chat view
   const handleNewChat = () => {
     setChatHistory([]);
   };
 
+  // ✅ Send question to backend and return result
   const handleSendMessage = async (question) => {
+    if (!question.trim()) return;
     setLoading(true);
+
     try {
       const response = await fetch('http://localhost:8000/solve', {
         method: 'POST',
@@ -31,14 +43,16 @@ function App() {
       });
 
       const data = await response.json();
-      const newChat = {
-        question,
-        answer: data.answer,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setChatHistory(prev => [...prev, newChat]);
+      return { result: data }; // ✅ Return result to MainContent
     } catch (error) {
-      console.error('Error:', error);
+      console.error('❌ Error:', error);
+      return {
+        result: {
+          answer: '⚠️ Error fetching answer.',
+          steps: [],
+          solution: '',
+        },
+      };
     } finally {
       setLoading(false);
     }
@@ -47,7 +61,11 @@ function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden">
       <Sidebar chatHistory={chatHistory} onNewChat={handleNewChat} />
-      <MainContent onSendMessage={handleSendMessage} loading={loading} />
+      <MainContent
+        chatHistory={chatHistory}
+        setChatHistory={setChatHistory}
+        onSendMessage={handleSendMessage}
+      />
     </div>
   );
 }

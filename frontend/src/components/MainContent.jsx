@@ -1,99 +1,157 @@
-import { useState } from 'react';
-import { IoMdSend } from 'react-icons/io';
-import { FiUpload } from 'react-icons/fi';
+import { useState, useEffect, useRef } from "react"
+import { IoMdSend } from "react-icons/io"
+import { FiUpload } from "react-icons/fi"
+import { BiCopy, BiLike, BiDislike } from "react-icons/bi"
+import ReactMarkdown from "react-markdown"
+import remarkMath from "remark-math"
+import rehypeKatex from "rehype-katex"
+import "katex/dist/katex.min.css"
 
-const MainContent = ({ onSendMessage, loading }) => {
-  const [input, setInput] = useState('');
-  const [answer, setAnswer] = useState('');
+const useTypingEffect = (text, speed = 15) => {
+  const [displayedText, setDisplayedText] = useState("")
+  useEffect(() => {
+    if (!text) return
+    setDisplayedText("")
+    let i = 0
+    const interval = setInterval(() => {
+      setDisplayedText((prev) => prev + text.charAt(i))
+      i++
+      if (i >= text.length) clearInterval(interval)
+    }, speed)
+    return () => clearInterval(interval)
+  }, [text])
+  return displayedText
+}
 
-  const handleSend = () => {
-    if (!input.trim() || loading) return;
-    onSendMessage(input);
-    setAnswer('');
-    setInput('');
-  };
+export default function MainContent({ chatHistory, setChatHistory, onSendMessage }) {
+  const [input, setInput] = useState("")
+  const [isTyping, setIsTyping] = useState(false)
+  const bottomRef = useRef(null)
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [chatHistory, isTyping])
+
+  const handleSend = async () => {
+    if (!input.trim()) return
+    const userMessage = { role: "user", content: input }
+    setChatHistory((prev) => [...prev, userMessage])
+    setInput("")
+    setIsTyping(true)
+    try {
+      const response = await fetch("/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: input })
+      })
+      const reader = response.body.getReader()
+      let fullAnswer = ""
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = new TextDecoder().decode(value)
+        fullAnswer += chunk
+        setChatHistory((prev) => {
+          const last = prev[prev.length - 1]
+          if (last?.role === "agent") {
+            last.content.answer = fullAnswer
+            return [...prev.slice(0, -1), last]
+          } else {
+            return [...prev, { role: "agent", content: { answer: chunk, steps: [], solution: "" } }]
+          }
+        })
+      }
+    } catch {
+      setChatHistory((prev) => [...prev, { role: "agent", content: { answer: "⚠️ Error fetching answer." } }])
+    }
+    setIsTyping(false)
+  }
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !loading) {
-      handleSend();
-    }
-  };
+    if (e.key === "Enter") handleSend()
+  }
 
   const handleFileUpload = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files[0]
     if (file) {
-      console.log('Uploading file:', file.name);
-      // Add your file upload logic here
+      const simulated = `Extracted question from ${file.name}`
+      setChatHistory((prev) => [...prev, { role: "user", content: simulated }])
+      onSendMessage(simulated)
     }
-  };
+  }
+
+  const copyToClipboard = (text) => navigator.clipboard.writeText(text)
+  const lastAgent = chatHistory.filter((m) => m.role === "agent").slice(-1)[0]
+  const animatedText = useTypingEffect(lastAgent?.content?.answer || "")
 
   return (
-    <div className="flex-1 flex flex-col bg-primary-darker h-screen">
-      {/* Welcome Section */}
-      <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
-        <h1 className="text-white text-4xl font-bold mb-4">
-          Welcome to Math Routing Agent
-        </h1>
-        <p className="text-gray-400 text-lg leading-relaxed max-w-2xl">
-          Your AI-powered mathematics assistant. Get instant help with complex
-          problems, step-by-step solutions, and personalized learning support.
-        </p>
-
-        {/* Curved Chat Bar */}
-        <div className="mt-10 flex justify-center">
-          <div className="w-[720px] bg-gray-800 border border-primary-orange rounded-full flex items-center px-5 py-3 shadow-lg gap-4">
-            {/* Upload Button */}
-            <label className="cursor-pointer text-white hover:text-primary-orange transition-colors">
+    <div className="flex flex-col h-screen bg-[#121212] text-white w-full">
+      {chatHistory.length === 0 && !isTyping ? (
+        <div className="flex flex-col flex-1 justify-center items-center text-center px-6">
+          <h1 className="text-4xl font-bold mb-4">Welcome to Math Routing Agent</h1>
+          <p className="text-gray-400 max-w-xl mb-8">Your AI-powered mathematics assistant. Get instant help with complex problems, step-by-step solutions, and personalized learning support.</p>
+          <div className="w-full max-w-xl flex items-center gap-3 bg-[#1E1E1E] border border-orange-500 rounded-full px-5 py-3 shadow-lg">
+            <label className="cursor-pointer text-gray-300 hover:text-orange-400 transition-colors">
               <FiUpload className="w-5 h-5" />
-              <input
-                type="file"
-                className="hidden"
-                accept=".pdf,.jpg,.jpeg,.png,.txt"
-                onChange={handleFileUpload}
-              />
+              <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.txt" onChange={handleFileUpload} />
             </label>
-
-            {/* Input Field */}
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Ask me any math question..."
-              className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none"
-              disabled={loading}
-            />
-
-            {/* Send Button */}
-            <button
-              onClick={handleSend}
-              disabled={loading}
-              className="bg-primary-orange hover:bg-primary-orange-hover text-white p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyPress} placeholder="Ask your math question..." className="flex-1 bg-transparent outline-none px-3 text-white placeholder-gray-500" />
+            <button onClick={handleSend} className="bg-orange-500 hover:bg-orange-600 text-white rounded-full p-2 transition-colors">
               <IoMdSend className="w-5 h-5" />
             </button>
           </div>
+          <div className="text-xs text-gray-500 text-center mt-4">Powered by Math Routing Agent • Built by Tharun Kumar</div>
         </div>
-      </div>
-
-      {/* Answer Display */}
-      {answer && (
-        <div className="pb-8 px-6 max-w-3xl mx-auto">
-          <div className="mt-6 bg-gray-800 text-white p-4 rounded-lg shadow">
-            <p className="font-semibold mb-2">Answer:</p>
-            <p>{answer}</p>
+      ) : (
+        <>
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 leading-relaxed">
+            {chatHistory.map((msg, idx) => (
+              <div key={idx} className={`p-4 rounded-2xl max-w-2xl ${msg.role === "agent" ? "bg-gray-900 border border-gray-700 text-white self-start" : "bg-[#1E1E1E] border border-orange-500 text-white self-end ml-auto"}`}>
+                {msg.role === "agent" ? (
+                  <>
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} className="prose prose-invert max-w-none">
+                      {idx === chatHistory.length - 1 && isTyping ? animatedText : msg.content.answer}
+                    </ReactMarkdown>
+                    {msg.content.steps?.filter((step) => step && step.trim()).map((step, i) => (
+                      <div key={i} className="text-gray-300 text-sm mt-2">
+                        <span className="font-semibold text-orange-400">Step {i + 1}:</span>{" "}
+                        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} className="inline">
+                          {step}
+                        </ReactMarkdown>
+                      </div>
+                    ))}
+                    {msg.content.solution && (
+                      <div className="mt-3 text-green-400 font-semibold flex items-center gap-2">
+                        Final Solution: {msg.content.solution}
+                        <button onClick={() => copyToClipboard(msg.content.solution)} className="text-gray-400 hover:text-white transition">
+                          <BiCopy />
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex gap-3 mt-3 text-gray-500">
+                      <button className="hover:text-green-400"><BiLike className="w-5 h-5" /></button>
+                      <button className="hover:text-red-400"><BiDislike className="w-5 h-5" /></button>
+                    </div>
+                  </>
+                ) : (
+                  <div>{msg.content}</div>
+                )}
+              </div>
+            ))}
+            <div ref={bottomRef} />
           </div>
-        </div>
-      )}
-
-      {/* Loading Message */}
-      {loading && (
-        <div className="pb-8 text-primary-orange text-center">
-          <p>Solving your problem...</p>
-        </div>
+          <div className="border-t border-gray-700 p-3 bg-[#121212] flex items-center gap-3 sticky bottom-0">
+            <label className="cursor-pointer text-gray-300 hover:text-orange-400 transition-colors">
+              <FiUpload className="w-5 h-5" />
+              <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.txt" onChange={handleFileUpload} />
+            </label>
+            <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyPress} placeholder="Type your question..." className="flex-1 bg-transparent outline-none px-3 text-white placeholder-gray-500" />
+            <button onClick={handleSend} className="bg-orange-500 hover:bg-orange-600 text-white rounded-full p-2 transition-colors">
+              <IoMdSend className="w-5 h-5" />
+            </button>
+          </div>
+        </>
       )}
     </div>
-  );
-};
-
-export default MainContent;
+  )
+}
